@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: angular-k8s-deployment
+  namespace: schooldevops
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: angular-k8s-deployment
+  template:
+    metadata:
+      labels:
+        app: angular-k8s-deployment
+    spec:
+      containers:
+        - name: angular-k8s-deployment
+          image: maroua256/devops-frontend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 85
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: angular-k8s-service
+  namespace: schooldevops
+  labels:
+    name: angular-k8s-deployment
+spec:
+  type: NodePort
+  selector:
+    app: angular-k8s-deployment
+  ports:
+    - port: 85
+      targetPort: 8082
+      protocol: TCP
