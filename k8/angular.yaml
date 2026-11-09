@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: angular-k8s-deployment
-          image: maroua256/devops-frontend:latest
+          image: maroua256/tudent-dashboard:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 85
