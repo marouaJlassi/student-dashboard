@@ -33,5 +33,5 @@ spec:
     app: angular-k8s-deployment
   ports:
     - port: 85
-      targetPort: 8082
+      targetPort: 8089
       protocol: TCP
