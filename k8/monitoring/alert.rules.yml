@@ -1,0 +1,42 @@
+groups:
+  - name: devops-alerts
+    rules:
+      - alert: BackendDown
+        expr: up{job="backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Backend Spring Boot injoignable ({{ $labels.instance }})"
+
+      - alert: JenkinsDown
+        expr: up{job="jenkins"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Jenkins ne répond plus aux métriques"
+
+      - alert: BackendHighErrorRate
+        expr: sum(rate(http_server_requests_seconds_count{job="backend",status=~"5.."}[2m])) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Taux d'erreurs 5xx élevé sur le backend"
+
+      - alert: JvmHeapHigh
+        expr: sum(jvm_memory_used_bytes{area="heap"}) / sum(jvm_memory_max_bytes{area="heap"}) > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Heap JVM du backend au-dessus de 85 %"
+
+      - alert: ContainerHighCpu
+        expr: rate(container_cpu_usage_seconds_total{name!=""}[2m]) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CPU élevé sur le conteneur {{ $labels.name }}"

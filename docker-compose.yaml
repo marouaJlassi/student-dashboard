@@ -10,7 +10,7 @@ services:
     command:
       - --nginx.scrape-uri=http://frontend:8089/nginx_status
     ports:
-      - '9117:9116'
+      - '9119:9118'
     depends_on:
       - frontend
     restart: unless-stopped

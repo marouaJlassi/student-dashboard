@@ -1,0 +1,36 @@
+services:
+  cadvisor-frontend:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    command: ["--port=8090"]
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    restart: unless-stopped
+
+  prometheus-frontend:
+    image: prom/prometheus:v2.54.1
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_frontend_data:/prometheus
+    ports:
+      - "9092:9090"        # 9090 is already used by your backend Prometheus
+    restart: unless-stopped
+
+  grafana-frontend:
+    image: grafana/grafana:11.2.0
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_frontend_data:/var/lib/grafana
+    ports:
+      - "3002:3000"        # 3000 is already used by your backend Grafana
+    depends_on:
+      - prometheus-frontend
+    restart: unless-stopped
+
+volumes:
+  prometheus_frontend_data:
+  grafana_frontend_data:
