@@ -1,24 +1,25 @@
-import base64, html, json, os, shutil, urllib.request
+import base64, html, json, os, re, urllib.error, urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
 E = html.escape
+env = os.getenv
 OUT = Path("pipeline-report")
 OUT.mkdir(exist_ok=True)
-K = {"crit": 0, "high": 0}
 
 STAGES = [
-    ("Maven Build", "🔨", "Compile et package le projet."),
-    ("Tests Unitaires + Coverage", "🧪", "Tests unitaires et couverture JaCoCo."),
-    ("Trivy FS Scan", "🛡️", "Vulnérabilités dans le code et les dépendances."),
-    ("Deploy to Nexus", "📦", "Publie l'artefact Maven sur Nexus."),
+    ("Checkout", "📥", "Clone le dépôt GitHub (branche main)."),
+    ("Install", "📦", "Installe les dépendances avec npm ci."),
+    ("Lint", "🧹", "Analyse statique du code avec ESLint."),
     ("SonarQube Analysis", "🔍", "Bugs, vulnérabilités et code smells."),
+    ("Quality Gate", "🚦", "Vérifie le Quality Gate SonarQube."),
+    ("Build", "🔨", "Build Angular en mode production."),
+    ("Archive", "🗄️", "Archive les fichiers du dossier dist."),
     ("Docker Build", "🐳", "Construit l'image Docker."),
-    ("Trivy Image Scan", "🛡️", "Vulnérabilités dans l'image Docker."),
     ("Docker Push", "🚀", "Publie l'image sur Docker Hub."),
     ("Docker Compose", "🧩", "Lance les conteneurs."),
     ("Deploy to Kubernetes", "☸️", "Déploie sur Minikube."),
-    ("Monitoring with Grafana Prometheus", "📈", "Prometheus, Grafana et cAdvisor."),
+    ("Monitoring Frontend", "📈", "Prometheus, Grafana et cAdvisor."),
 ]
 
 ST = {
@@ -27,9 +28,15 @@ ST = {
     "NOT_EXECUTED": ("Non exécuté", "mute"), "IN_PROGRESS": ("En cours", "info"),
 }
 
+
+def norm(s):
+    return re.sub(r"[^a-z0-9]+", " ", (s or "").lower()).strip()
+
+
 def get_stages():
-    build_url = os.getenv("BUILD_URL", "").rstrip("/")
-    user, token = os.getenv("JENKINS_USER"), os.getenv("JENKINS_TOKEN")
+    build_url = env("BUILD_URL", "").rstrip("/")
+    user, token = env("JENKINS_USER"), env("JENKINS_TOKEN")
+    print(f"BUILD_URL={build_url!r} user_set={bool(user)} token_set={bool(token)}")
     if not (build_url and user and token):
         print("Variables Jenkins manquantes")
         return {}
@@ -38,57 +45,36 @@ def get_stages():
                                  headers={"Authorization": f"Basic {auth}"})
     try:
         with urllib.request.urlopen(req, timeout=20) as r:
-            return {s["name"]: s for s in json.load(r).get("stages", [])}
+            stages = {norm(s["name"]): s for s in json.load(r).get("stages", [])}
+            print("Stages trouvés:", list(stages))
+            return stages
+    except urllib.error.HTTPError as exc:
+        print(f"API Jenkins: HTTP {exc.code} {exc.reason} sur {req.full_url}")
     except Exception as exc:
         print("API Jenkins indisponible:", exc)
-        return {}
+    return {}
+
 
 def dur(ms):
     m, s = divmod(int((ms or 0) / 1000), 60)
     return f"{m} min {s:02d} s" if m else f"{s} s"
 
-NA = "<p class='muted'>Rapport introuvable.</p>"
-
-def trivy(path):
-    def run():
-        p = Path(path)
-        try:
-            d = json.loads(p.read_text(encoding="utf-8"))
-        except Exception:
-            return NA
-        shutil.copy2(p, OUT / p.name)
-        vulns = [v for r in (d.get("Results") or []) for v in (r.get("Vulnerabilities") or [])]
-        crit = sum(1 for v in vulns if v.get("Severity") == "CRITICAL")
-        high = sum(1 for v in vulns if v.get("Severity") == "HIGH")
-        K["crit"] += crit
-        K["high"] += high
-        vulns.sort(key=lambda v: (v.get("Severity") != "CRITICAL", v.get("PkgName", "")))
-        out = (f"<p><b class='ko-t'>{crit}</b> critiques — <b class='warn-t'>{high}</b> élevées</p>")
-        if vulns:
-            rows = "".join(
-                f"<tr><td>{E(v.get('Severity',''))}</td><td>{E(v.get('VulnerabilityID',''))}</td>"
-                f"<td>{E(v.get('PkgName',''))}</td><td>{E(v.get('InstalledVersion',''))}</td>"
-                f"<td>{E(v.get('FixedVersion') or '—')}</td></tr>" for v in vulns[:40])
-            out += ("<div class='scroll'><table><thead><tr><th>Sévérité</th><th>CVE</th><th>Paquet</th>"
-                    f"<th>Installée</th><th>Corrigée</th></tr></thead><tbody>{rows}</tbody></table></div>")
-        else:
-            out += "<p class='good'>✔ Aucune vulnérabilité.</p>"
-        return out + f"<p><a class='btn' href='{E(p.name)}'>Télécharger le JSON</a></p>"
-    return run
 
 def sonar():
+    base = env("SONAR_URL", "http://127.0.0.1:9000").rstrip("/")
+    key = env("SONAR_PROJECT_KEY", "student-dashboard")
     return ("<p><a class='btn' target='_blank' "
-            "href='http://127.0.0.1:9000/dashboard?id=devopsbackend'>Ouvrir SonarQube</a></p>")
+            f"href='{E(base)}/dashboard?id={E(key)}'>Ouvrir SonarQube</a></p>")
 
-def jacoco():
-    base = os.getenv("BUILD_URL", "#")
-    return f"<p><a class='btn' target='_blank' href='{E(base)}JaCoCo_Coverage/'>Ouvrir JaCoCo</a></p>"
+
+def artifacts():
+    base = env("BUILD_URL", "#")
+    return f"<p><a class='btn' target='_blank' href='{E(base)}artifact/'>Voir les artefacts</a></p>"
+
 
 DET = {
-    "Trivy FS Scan": trivy("trivy-report.json"),
-    "Trivy Image Scan": trivy("trivy-image-report.json"),
     "SonarQube Analysis": sonar,
-    "Tests Unitaires + Coverage": jacoco,
+    "Archive": artifacts,
 }
 
 CSS = """
@@ -109,10 +95,7 @@ header h1{margin:0 0 6px}.meta{display:flex;flex-wrap:wrap;gap:10px 22px;margin-
 .badge{padding:4px 12px;border-radius:999px;font-size:.8rem;font-weight:700;color:#fff;background:var(--mute)}
 .badge.ok{background:var(--ok)}.badge.ko{background:var(--ko)}.badge.warn{background:var(--warn)}.badge.info{background:var(--info)}
 .desc,.muted{color:var(--muted)}.facts{font-size:.85rem;color:var(--muted);margin-bottom:8px}
-.scroll{overflow-x:auto;border:1px solid var(--line);border-radius:10px}table{border-collapse:collapse;width:100%;font-size:.85rem}
-th,td{padding:8px 12px;text-align:left;border-bottom:1px solid var(--line)}th{background:var(--bg);color:var(--muted)}
 .btn{display:inline-block;padding:7px 14px;border-radius:9px;background:var(--accent);color:#fff;text-decoration:none;font-size:.85rem;font-weight:600}
-.good{color:var(--ok);font-weight:600}.ko-t{color:var(--ko)}.warn-t{color:var(--warn)}
 footer{text-align:center;color:var(--muted);font-size:.8rem;margin-top:30px}
 """
 
@@ -120,7 +103,7 @@ jobs = get_stages()
 total = {"ok": 0, "ko": 0, "other": 0}
 sections = ""
 for name, icon, desc in STAGES:
-    job = jobs.get(name)
+    job = jobs.get(norm(name))
     label, cls = ST.get(job.get("status"), ("Inconnu", "mute")) if job else ("Non trouvé", "mute")
     total[cls if cls in ("ok", "ko") else "other"] += 1
     facts = f"Stage : <code>{E(name)}</code>"
@@ -139,24 +122,26 @@ if total["ko"]:
 elif total["ok"] == len(STAGES):
     verdict = "✅ Tous les stages sont réussis"
 else:
-    verdict = "ℹ️ Certains stages sont ignorés ou introuvables"
+    verdict = "ℹ️ Certains stages sont instables, ignorés ou introuvables"
 
+total_dur = dur(sum((j.get("durationMillis") or 0) for j in jobs.values()))
 now = datetime.now(timezone.utc).strftime("%d/%m/%Y %H:%M UTC")
-env = os.getenv
+job_name = env("JOB_NAME", "")
+build_url = env("BUILD_URL", "#")
+
 page = f"""<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Rapport Jenkins — {E(env('JOB_NAME',''))}</title><style>{CSS}</style></head>
+<title>Rapport Jenkins — {E(job_name)}</title><style>{CSS}</style></head>
 <body><div class="wrap"><header><h1>Rapport du pipeline Jenkins</h1>
-<p>{E(env('JOB_NAME',''))} — qualité, sécurité et déploiements</p>
-<div class="meta"><span>🔖 Commit : <b>{E(env('GIT_SHORT',''))}</b></span>
-<span>🔗 <a style="color:#fff" href="{E(env('BUILD_URL','#'))}">Build #{E(env('BUILD_NUMBER',''))}</a></span>
+<p>{E(job_name)} — qualité, build et déploiements</p>
+<div class="meta"><span>🔖 Commit : <b>{E(env('GIT_SHORT', ''))}</b></span>
+<span>🔗 <a style="color:#fff" href="{E(build_url)}">Build #{E(env('BUILD_NUMBER', ''))}</a></span>
 <span>🕒 {now}</span></div><div class="global">{E(verdict)}</div></header>
 <div class="cards">
 <div class="kpi ok"><b>{total['ok']}</b><span>Stages réussis</span></div>
 <div class="kpi ko"><b>{total['ko']}</b><span>Stages échoués</span></div>
 <div class="kpi warn"><b>{total['other']}</b><span>Autres</span></div>
-<div class="kpi ko"><b>{K['crit']}</b><span>Vulnérabilités critiques</span></div>
-<div class="kpi warn"><b>{K['high']}</b><span>Vulnérabilités élevées</span></div>
+<div class="kpi"><b>{total_dur}</b><span>Durée totale</span></div>
 </div>{sections}<footer>Généré par Jenkins — {now}</footer></div></body></html>"""
 
 (OUT / "index.html").write_text(page, encoding="utf-8")
