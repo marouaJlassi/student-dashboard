@@ -16,7 +16,7 @@ services:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus_frontend_data:/prometheus
     ports:
-      - "9092:9090"        # 9090 is already used by your backend Prometheus
+      - "9095:9090"        # 9090 is already used by your backend Prometheus
     restart: unless-stopped
 
   grafana-frontend:
