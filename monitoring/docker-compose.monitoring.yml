@@ -27,8 +27,6 @@ services:
       - grafana_frontend_data:/var/lib/grafana
     ports:
       - "3002:3000"        # 3000 is already used by your backend Grafana
-    depends_on:
-      - prometheus-frontend
     restart: unless-stopped
 
 volumes:
