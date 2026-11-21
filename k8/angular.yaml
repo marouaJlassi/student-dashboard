@@ -1,20 +1,20 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: angular-k8s-deployment
+  name: schooldevops-deployment
   namespace: schooldevops
 spec:
   replicas: 3
   selector:
     matchLabels:
-      app: angular-k8s-deployment
+      app: schooldevops-deployment
   template:
     metadata:
       labels:
-        app: angular-k8s-deployment
+        app: schooldevops-deployment
     spec:
       containers:
-        - name: angular-k8s-deployment
+        - name: schooldevops-deployment
           image: maroua256/student-dashboard:latest
           imagePullPolicy: Always
           ports:
@@ -23,14 +23,14 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: angular-k8s-service
+  name: schooldevops-service
   namespace: schooldevops
   labels:
-    name: angular-k8s-deployment
+    name: schooldevops-deployment
 spec:
   type: NodePort
   selector:
-    app: angular-k8s-deployment
+    app: schooldevops-deployment
   ports:
     - port: 85
       targetPort: 8089
