@@ -1,21 +1,30 @@
+
 global:
   scrape_interval: 15s
+  evaluation_interval: 15s
 
 scrape_configs:
-  - job_name: cadvisor
+
+  # Monitoring des conteneurs Docker
+  - job_name: "cadvisor"
     static_configs:
-      - targets: ['cadvisor-frontend:8080']
-  # prometheus.yml
-  - job_name: frontend
+      - targets:
+          - "cadvisor-frontend:8090"
+
+  # Vérification de disponibilité du frontend via Blackbox
+  - job_name: "frontend"
     metrics_path: /probe
     params:
       module: [http_2xx]
     static_configs:
-      - targets: ['http://frontend:8089']   # nom du service Compose + port interne
+      - targets:
+          - "http://frontend:8089"
     relabel_configs:
       - source_labels: [__address__]
         target_label: __param_target
+
       - source_labels: [__param_target]
         target_label: instance
+
       - target_label: __address__
-        replacement: blackbox:9115
+        replacement: "blackbox:9115"
