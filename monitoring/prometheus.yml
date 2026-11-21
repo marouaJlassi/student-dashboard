@@ -4,7 +4,7 @@ global:
 scrape_configs:
   - job_name: cadvisor
     static_configs:
-      - targets: ['cadvisor-frontend:8090']
+      - targets: ['cadvisor-frontend:8080']
   # prometheus.yml
   - job_name: frontend
     metrics_path: /probe
