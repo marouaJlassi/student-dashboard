@@ -28,6 +28,9 @@ services:
     ports:
       - "3002:3000"        # 3000 is already used by your backend Grafana
     restart: unless-stopped
+  blackbox:
+    image: prom/blackbox-exporter:v0.25.0
+    restart: unless-stopped
 
 volumes:
   prometheus_frontend_data:
